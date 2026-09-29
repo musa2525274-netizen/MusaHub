@@ -11,18 +11,17 @@ jobs:
     runs-on: macos-14
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Create project.yml
+      - name: Create Xcode project
+        shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          project = """name: MusaHub
+          cat > project.yml <<'EOF'
+          name: MusaHub
 
           options:
             bundleIdPrefix: com.musa
@@ -33,35 +32,112 @@ jobs:
           settings:
             base:
               SWIFT_VERSION: "5.0"
+              IPHONEOS_DEPLOYMENT_TARGET: "17.0"
 
           targets:
             MusaHub:
               type: application
               platform: iOS
+
               sources:
                 - MusaHubApp.swift
                 - ContentView.swift
                 - ScreenRecorderView.swift
+
               settings:
                 base:
                   PRODUCT_BUNDLE_IDENTIFIER: com.musa.musahub
-                  INFOPLIST_KEY_CFBundleDisplayName: Musa Hub
-                  INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-                  INFOPLIST_KEY_UILaunchScreen_Generation: YES
+                  PRODUCT_NAME: MusaHub
                   SWIFT_VERSION: "5.0"
+                  IPHONEOS_DEPLOYMENT_TARGET: "17.0"
                   TARGETED_DEVICE_FAMILY: "1,2"
+
+                  INFOPLIST_KEY_CFBundleDisplayName: "Musa Hub"
+                  INFOPLIST_KEY_CFBundleName: "MusaHub"
+                  INFOPLIST_KEY_UILaunchScreen_Generation: YES
+                  INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+
                   CODE_SIGNING_ALLOWED: NO
                   CODE_SIGNING_REQUIRED: NO
-          """
+                  CODE_SIGN_IDENTITY: ""
 
-          Path("project.yml").write_text(project.lstrip(), encoding="utf-8")
-          PY
+              info:
+                path: MusaHub-Info.plist
+                properties:
+                  CFBundleDisplayName: Musa Hub
+                  CFBundleName: MusaHub
+                  CFBundlePackageType: APPL
+                  CFBundleShortVersionString: "1.0"
+                  CFBundleVersion: "1"
+                  LSRequiresIPhoneOS: true
+                  UIApplicationSceneManifest:
+                    UIApplicationSupportsMultipleScenes: true
+                  UILaunchScreen: {}
+                  UIRequiredDeviceCapabilities:
+                    - arm64
+          EOF
 
-          cat project.yml
+          cat > MusaHub-Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+          "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDisplayName</key>
+              <string>Musa Hub</string>
+
+              <key>CFBundleExecutable</key>
+              <string>$(EXECUTABLE_NAME)</string>
+
+              <key>CFBundleIdentifier</key>
+              <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+
+              <key>CFBundleName</key>
+              <string>MusaHub</string>
+
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+
+              <key>CFBundleVersion</key>
+              <string>1</string>
+
+              <key>LSRequiresIPhoneOS</key>
+              <true/>
+
+              <key>UILaunchScreen</key>
+              <dict/>
+
+              <key>UIDeviceFamily</key>
+              <array>
+                  <integer>1</integer>
+                  <integer>2</integer>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
           xcodegen generate
 
-      - name: Build iOS app
+      - name: Verify Xcode project
         run: |
+          test -f MusaHub.xcodeproj/project.pbxproj
+          test -f MusaHub-Info.plist
+
+          echo "Xcode project:"
+          ls -la MusaHub.xcodeproj
+
+          echo "Info.plist:"
+          plutil -p MusaHub-Info.plist
+
+      - name: Build iOS application
+        run: |
+          rm -rf "$RUNNER_TEMP/DerivedData"
           rm -rf "$RUNNER_TEMP/build"
 
           xcodebuild \
@@ -73,21 +149,52 @@ jobs:
             CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             build
+
+      - name: Verify application bundle
+        run: |
+          APP="$RUNNER_TEMP/build/MusaHub.app"
+
+          test -d "$APP"
+          test -f "$APP/MusaHub"
+          test -f "$APP/Info.plist"
+
+          echo "Application bundle:"
+          find "$APP" -maxdepth 2 -type f | sort
+
+          echo "Info.plist:"
+          plutil -p "$APP/Info.plist"
+
+          echo "Executable:"
+          file "$APP/MusaHub"
 
       - name: Create IPA
         run: |
-          mkdir -p "$RUNNER_TEMP/Payload"
+          rm -rf "$RUNNER_TEMP/ipa"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
 
           cp -R \
             "$RUNNER_TEMP/build/MusaHub.app" \
-            "$RUNNER_TEMP/Payload/MusaHub.app"
+            "$RUNNER_TEMP/ipa/Payload/MusaHub.app"
 
-          cd "$RUNNER_TEMP"
-          zip -r MusaHub.ipa Payload
+          cd "$RUNNER_TEMP/ipa"
+
+          zip -r "$RUNNER_TEMP/MusaHub.ipa" Payload
+
+      - name: Verify IPA
+        run: |
+          test -f "$RUNNER_TEMP/MusaHub.ipa"
+
+          echo "IPA:"
+          ls -lh "$RUNNER_TEMP/MusaHub.ipa"
+
+          echo "IPA contents:"
+          unzip -l "$RUNNER_TEMP/MusaHub.ipa"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: MusaHub-IPA
           path: ${{ runner.temp }}/MusaHub.ipa
+          if-no-files-found: error
