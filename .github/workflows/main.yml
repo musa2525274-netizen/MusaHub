@@ -22,10 +22,7 @@ jobs:
           cat > project.yml <<'EOF'
           name: MusaHub
 
-          options:
-            bundleIdPrefix: com.musa
-            deploymentTarget:
-              iOS: "17.0"
+          https://chatgpt.com/c/6abbc0db-cb7c-83ed-9ec8-c5bfba50c687#:~:text=YAML-,options%3A%0A%20%20bundleIdPrefix%3A%20com.musa%0A%20%20xcodeVersion%3A%20%2215.4%22%0A%20%20projectFormat%3A%20xcode15_3%0A%20%20deploymentTarget%3A%0A%20%20%20%20iOS%3A%20%2217.0%22,-Yani%20ilgili%20b%C3%B6l%C3%BCm%C3%BCn
 
           settings:
             base:
